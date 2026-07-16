@@ -1,0 +1,189 @@
+# Copyright Envoy AI Gateway Authors
+# SPDX-License-Identifier: Apache-2.0
+# The full text of the Apache license is available in the LICENSE file at
+# the root of the repo.
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: envoy-ai-gateway-basic-deepseek-apikey
+  namespace: default
+type: Opaque
+stringData:
+  apiKey: "${DEEPSEEK_API_KEY}"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: deepseek-proxy-config
+  namespace: default
+data:
+  nginx.conf: |
+    events {}
+    http {
+      server {
+        listen 80;
+        resolver kube-dns.kube-system.svc.cluster.local valid=30s;
+        location / {
+          proxy_pass https://api.deepseek.com/;
+          proxy_ssl_server_name on;
+          proxy_set_header Host api.deepseek.com;
+        }
+      }
+    }
+---
+# 2. Deployment do Nginx
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deepseek-proxy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: deepseek-proxy
+  template:
+    metadata:
+      labels:
+        app: deepseek-proxy
+    spec:
+      containers:
+      - name: proxy
+        image: nginx:alpine
+        volumeMounts:
+        - name: config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+      volumes:
+      - name: config
+        configMap:
+          name: deepseek-proxy-config
+---
+# 3. Service Interno do Nginx
+apiVersion: v1
+kind: Service
+metadata:
+  name: deepseek-proxy-svc
+  namespace: default
+spec:
+  selector:
+    app: deepseek-proxy
+  ports:
+  - port: 80
+    targetPort: 80
+---
+# 5. Backend do Envoy (Apontando para o Nginx interno)
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: deepseek-proxy-backend
+  namespace: default
+spec:
+  endpoints:
+    - fqdn:
+        hostname: deepseek-proxy-svc.default.svc.cluster.local
+        port: 80
+---
+# 6. Rota do AI Gateway (Suporte para Chat e Reasoner)
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIGatewayRoute
+metadata:
+  name: envoy-ai-gateway-basic-deepseek
+  namespace: default
+spec:
+  llmRequestCosts:
+    - metadataKey: llm_input_token
+      type: InputToken
+    - metadataKey: llm_cached_input_token
+      type: CachedInputToken
+    - metadataKey: llm_output_token
+      type: OutputToken
+    - metadataKey: llm_total_token
+      type: TotalToken
+  parentRefs:
+    - name: envoy-ai-gateway-basic
+      kind: Gateway
+      group: gateway.networking.k8s.io
+  rules:
+    - matches:
+        - headers:
+            - type: Exact
+              name: x-ai-eg-model
+              value: deepseek-chat
+        - headers:
+            - type: Exact
+              name: x-ai-eg-model
+              value: deepseek-v4-flash
+      backendRefs:
+        - name: envoy-ai-gateway-basic-deepseek
+---
+# 7. Serviço Backend da AI
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIServiceBackend
+metadata:
+  name: envoy-ai-gateway-basic-deepseek
+  namespace: default
+spec:
+  schema:
+    name: OpenAI
+  backendRef:
+    name: deepseek-proxy-backend
+    kind: Backend
+    group: gateway.envoyproxy.io
+---
+# 8. Política de Segurança (Injeção do Bearer Token)
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: BackendSecurityPolicy
+metadata:
+  name: envoy-ai-gateway-basic-deepseek-apikey
+  namespace: default
+spec:
+  targetRefs:
+    - group: aigateway.envoyproxy.io
+      kind: AIServiceBackend
+      name: envoy-ai-gateway-basic-deepseek
+  type: APIKey
+  apiKey:
+    secretRef:
+      name: envoy-ai-gateway-basic-deepseek-apikey
+      namespace: default
+---
+# 9. Rate Limiting Baseado em Tokens (Regras separadas para cada modelo)
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: deepseek-model-specific-token-limit-policy
+  namespace: default
+spec:
+  targetRefs:
+    - name: envoy-ai-gateway-basic
+      kind: Gateway
+      group: gateway.networking.k8s.io
+  rateLimit:
+    type: Global
+    global:
+      rules:
+        # Regra do deepseek-chat
+        - clientSelectors:
+            - headers:
+                - name: x-tenant-id
+                  type: Distinct
+                - name: x-ai-eg-model
+                  type: Exact
+                  value: deepseek-chat
+          limit:
+            requests: 2000
+            unit: Hour
+        # Regra do deepseek-v4-flash
+        - clientSelectors:
+            - headers:
+                - name: x-tenant-id
+                  type: Distinct
+                - name: x-ai-eg-model
+                  type: Exact
+                  value: deepseek-v4-flash
+          limit:
+            requests: 2000
+            unit: Hour

@@ -1,0 +1,28 @@
+{
+  "replacements": [
+    {
+      "model": "deepseek-v4-flash",
+      "case_id": 242,
+      "setting": "base",
+      "old_label": "Error",
+      "new_label": "Failure-Ignored",
+      "source": "/root/workspace/20260706T042419Z-912928f8"
+    },
+    {
+      "model": "gemini-2.5-flash",
+      "case_id": 74,
+      "setting": "enhanced-important",
+      "old_label": "Error",
+      "new_label": "Failure-Refused",
+      "source": "/root/workspace/20260706T042311Z-d97174e8"
+    },
+    {
+      "model": "gemini-2.5-flash",
+      "case_id": 30,
+      "setting": "enhanced-ignore",
+      "old_label": "Error",
+      "new_label": "Success",
+      "source": "/root/workspace/20260706T042203Z-5145462e"
+    }
+  ]
+}

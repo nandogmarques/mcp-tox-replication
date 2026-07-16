@@ -1,0 +1,27 @@
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: mcptox-wrapper
+spec:
+  endpoints:
+    - fqdn:
+        hostname: mcptox-wrapper.default.svc.cluster.local
+        port: 8000
+---
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: MCPRoute
+metadata:
+  name: mcptox-wrapper
+spec:
+  parentRefs:
+    - name: envoy-ai-gateway-basic
+      kind: Gateway
+      group: gateway.networking.k8s.io
+  path: /mcp
+  backendRefs:
+    - name: mcptox-wrapper
+      kind: Backend
+      group: gateway.envoyproxy.io
+      # FastMCP mounts the Streamable HTTP application with a trailing slash.
+      # Calling /mcp returns 307, which the MCP gateway does not follow.
+      path: /mcp/

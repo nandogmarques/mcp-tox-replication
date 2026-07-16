@@ -1,0 +1,530 @@
+---
+title: "MCPTox - Stratified Sample ASR Confidence Intervals"
+output: md_document
+params:
+  report_dir: "../data/reports/stratified-repeats-k30-r5"
+  consolidated_path: "../data/reports/stratified-repeats-k30-r5/consolidated_results_patched.csv"
+  image_path: null
+  tex_path: null
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+required_packages <- c("knitr")
+missing_packages <- required_packages[
+  !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
+]
+if (length(missing_packages) > 0) {
+  stop(
+    "Missing R packages: ", paste(missing_packages, collapse = ", "),
+    ". Install them with install.packages(c(",
+    paste(sprintf("'%s'", missing_packages), collapse = ", "), "))."
+  )
+}
+
+model_order <- c("gpt-4o-mini", "gemini-2.5-flash", "deepseek-v4-flash")
+model_labels <- c(
+  "gpt-4o-mini" = "GPT-4o-mini",
+  "gemini-2.5-flash" = "Gemini-2.5-Flash",
+  "deepseek-v4-flash" = "DeepSeek-V4-Flash"
+)
+
+setting_order <- c("base", "enhanced-important", "enhanced-ignore")
+setting_labels <- c(
+  "base" = "Base",
+  "enhanced-important" = "Enhanced 1",
+  "enhanced-ignore" = "Enhanced 2"
+)
+
+paradigm_order <- c("Template-1", "Template-2", "Template-3")
+paradigm_labels <- c(
+  "Template-1" = "P1",
+  "Template-2" = "P2",
+  "Template-3" = "P3"
+)
+
+invalid_labels <- c("None", "Error")
+
+wilson_interval <- function(success, total, z = 1.959963984540054) {
+  if (total == 0) {
+    return(c(NA_real_, NA_real_))
+  }
+  phat <- success / total
+  denom <- 1 + z^2 / total
+  centre <- (phat + z^2 / (2 * total)) / denom
+  margin <- z * sqrt((phat * (1 - phat) + z^2 / (4 * total)) / total) / denom
+  c(max(0, centre - margin), min(1, centre + margin))
+}
+
+as_percent <- function(value, digits = 1) {
+  ifelse(is.na(value), "NA", sprintf(paste0("%.", digits, "f"), 100 * value))
+}
+```
+
+## Input
+
+```{r load-results}
+if (is.null(params$report_dir) || !nzchar(params$report_dir)) {
+  stop("Set params$report_dir to the stratified repeated report directory.")
+}
+
+if (!is.null(params$consolidated_path) && nzchar(params$consolidated_path)) {
+  consolidated_path <- normalizePath(params$consolidated_path, mustWork = TRUE)
+  report_dir <- dirname(consolidated_path)
+} else {
+  report_dir <- normalizePath(params$report_dir, mustWork = TRUE)
+  consolidated_path <- file.path(report_dir, "consolidated_results_patched.csv")
+}
+if (!file.exists(consolidated_path)) {
+  consolidated_path <- file.path(report_dir, "consolidated_results.csv")
+}
+
+stats_path <- file.path(report_dir, "stats-patched", "asr_by_cell.csv")
+if (!file.exists(stats_path) && !file.exists(file.path(report_dir, "consolidated_results_patched.csv"))) {
+  stats_path <- file.path(report_dir, "stats", "asr_by_cell.csv")
+}
+
+if (file.exists(stats_path)) {
+  asr_cells <- read.csv(stats_path, stringsAsFactors = FALSE, check.names = FALSE)
+} else if (file.exists(consolidated_path)) {
+  results <- read.csv(consolidated_path, stringsAsFactors = FALSE, check.names = FALSE)
+  required_columns <- c("model", "setting", "paradigm", "label")
+  missing_columns <- setdiff(required_columns, names(results))
+  if (length(missing_columns) > 0) {
+    stop("Missing columns: ", paste(missing_columns, collapse = ", "))
+  }
+  results$valid <- !(results$label %in% invalid_labels)
+  results$success <- results$label == "Success"
+
+  grid <- expand.grid(
+    model = model_order,
+    paradigm = paradigm_order,
+    setting = setting_order,
+    stringsAsFactors = FALSE
+  )
+
+  asr_cells <- do.call(rbind, lapply(seq_len(nrow(grid)), function(index) {
+    key <- grid[index, ]
+    rows <- results[
+      results$model == key$model &
+        results$paradigm == key$paradigm &
+        results$setting == key$setting,
+    ]
+    valid_rows <- rows[rows$valid, ]
+    success <- sum(valid_rows$success)
+    valid <- nrow(valid_rows)
+    ci <- wilson_interval(success, valid)
+    data.frame(
+      model = key$model,
+      paradigm = key$paradigm,
+      setting = key$setting,
+      valid = valid,
+      success = success,
+      asr = if (valid == 0) NA_real_ else success / valid,
+      ci95_low = ci[1],
+      ci95_high = ci[2],
+      invalid = nrow(rows) - valid,
+      stringsAsFactors = FALSE
+    )
+  }))
+} else {
+  stop("Neither stats/asr_by_cell.csv nor consolidated_results.csv was found in ", report_dir)
+}
+
+asr_cells$model <- factor(asr_cells$model, levels = model_order)
+asr_cells$setting <- factor(asr_cells$setting, levels = setting_order)
+asr_cells$paradigm <- factor(asr_cells$paradigm, levels = paradigm_order)
+asr_cells <- asr_cells[order(asr_cells$paradigm, asr_cells$setting, asr_cells$model), ]
+
+image_path <- params$image_path
+if (is.null(image_path) || !nzchar(image_path)) {
+  image_path <- file.path(report_dir, "stratified_asr_ci.png")
+}
+image_path <- normalizePath(image_path, mustWork = FALSE)
+dir.create(dirname(image_path), recursive = TRUE, showWarnings = FALSE)
+
+setting_image_path <- file.path(report_dir, "stratified_asr_ci_by_setting.png")
+setting_image_path <- normalizePath(setting_image_path, mustWork = FALSE)
+
+tex_path <- params$tex_path
+if (is.null(tex_path) || !nzchar(tex_path)) {
+  tex_path <- file.path(report_dir, "stratified_asr_ci_figure.tex")
+}
+tex_path <- normalizePath(tex_path, mustWork = FALSE)
+dir.create(dirname(tex_path), recursive = TRUE, showWarnings = FALSE)
+
+setting_tex_path <- file.path(report_dir, "stratified_asr_ci_by_setting_figure.tex")
+setting_tex_path <- normalizePath(setting_tex_path, mustWork = FALSE)
+
+cat("Report: `", report_dir, "`  \n", sep = "")
+cat("Cells: ", nrow(asr_cells), "  \n", sep = "")
+cat("Image: `", image_path, "`  \n", sep = "")
+```
+
+## Figure
+
+```{r draw-figure}
+plot_data <- asr_cells
+
+grDevices::png(
+  filename = image_path,
+  width = 3600,
+  height = 1850,
+  res = 220
+)
+
+old_par <- par(no.readonly = TRUE)
+on.exit(par(old_par), add = TRUE)
+
+layout(matrix(c(1, 2, 3, 4, 4, 4), nrow = 2, byrow = TRUE), heights = c(7, 1.05))
+par(oma = c(2.2, 0, 2.2, 0))
+
+point_shapes <- c(16, 17, 15)
+names(point_shapes) <- model_order
+point_cols <- c(
+  "gpt-4o-mini" = "#2F6BFF",
+  "gemini-2.5-flash" = "#00A67E",
+  "deepseek-v4-flash" = "#7B3FF2"
+)
+names(point_cols) <- model_order
+model_offsets <- c(0.22, 0, -0.22)
+names(model_offsets) <- model_order
+setting_positions <- rev(seq_along(setting_order))
+names(setting_positions) <- setting_order
+
+for (panel_index in seq_along(paradigm_order)) {
+  paradigm <- paradigm_order[panel_index]
+  subset_rows <- plot_data[plot_data$paradigm == paradigm, ]
+  subset_rows <- subset_rows[order(subset_rows$setting, subset_rows$model), ]
+  subset_rows$y <- setting_positions[as.character(subset_rows$setting)] +
+    model_offsets[as.character(subset_rows$model)]
+
+  if (panel_index == 1) {
+    par(mar = c(5.4, 7.2, 3.2, 1.1))
+  } else {
+    par(mar = c(5.4, 1.2, 3.2, 1.1))
+  }
+
+  plot(
+    NA,
+    xlim = c(0, 100),
+    ylim = c(0.45, length(setting_order) + 0.55),
+    xlab = "ASR (%) com IC 95% de Wilson",
+    ylab = "",
+    yaxt = "n",
+    main = "",
+    bty = "n",
+    cex.lab = if (panel_index == 2) 1.35 else 0.9,
+    font.lab = if (panel_index == 2) 2 else 1,
+    cex.main = 1.1
+  )
+  mtext(
+    unname(paradigm_labels[paradigm]),
+    side = 3,
+    line = 1.0,
+    font = 2,
+    cex = 1.45
+  )
+  axis(1, at = seq(0, 100, by = 20), las = 1, cex.axis = 0.85)
+  if (panel_index == 1) {
+    axis(
+      2,
+      at = setting_positions,
+      labels = FALSE,
+      las = 1,
+      tick = FALSE
+    )
+    text(
+      x = par("usr")[1] - 2.5,
+      y = setting_positions,
+      labels = unname(setting_labels[setting_order]),
+      xpd = NA,
+      adj = 1,
+      font = 2,
+      cex = 1.05
+    )
+  }
+  abline(v = seq(0, 100, by = 20), col = "gray90", lwd = 0.8)
+  abline(h = setting_positions, col = "gray92", lwd = 0.8)
+
+  for (i in seq_len(nrow(subset_rows))) {
+    row <- subset_rows[i, ]
+    x <- 100 * row$asr
+    low <- 100 * row$ci95_low
+    high <- 100 * row$ci95_high
+    y <- row$y
+    model_name <- as.character(row$model)
+    segments(low, y, high, y, col = point_cols[model_name], lwd = 1.8)
+    segments(low, y - 0.08, low, y + 0.08, col = point_cols[model_name], lwd = 1.2)
+    segments(high, y - 0.08, high, y + 0.08, col = point_cols[model_name], lwd = 1.2)
+    points(
+      x,
+      y,
+      pch = point_shapes[model_name],
+      col = point_cols[model_name],
+      bg = point_cols[model_name],
+      cex = 1.05
+    )
+    text(
+      min(99, high + 3.2),
+      y,
+      paste0(as_percent(row$asr), "%"),
+      cex = 0.66,
+      adj = 0
+    )
+  }
+}
+
+par(mar = c(0, 0, 0, 0))
+plot.new()
+text(
+  0.5,
+  0.78,
+  "ASR (%) com IC 95% de Wilson",
+  font = 2,
+  cex = 1.08
+)
+legend(
+  "bottom",
+  legend = unname(model_labels[model_order]),
+  pch = point_shapes[model_order],
+  col = point_cols[model_order],
+  pt.cex = 1.2,
+  bty = "n",
+  horiz = TRUE,
+  x.intersp = 1.0,
+  text.width = strwidth("DeepSeek-V4-Flash") * 1.15
+)
+
+mtext(
+  "Attack Success Rate in the stratified repeated sample (k = 30, r = 5)",
+  outer = TRUE,
+  line = 0.4,
+  font = 2,
+  cex = 1.15
+)
+
+grDevices::dev.off()
+
+latex_figure <- c(
+  "% Required package: \\usepackage{graphicx}",
+  "\\begin{figure*}[t]",
+  "\\centering",
+  paste0("\\includegraphics[width=\\textwidth]{", basename(image_path), "}"),
+  "\\caption{Taxa de Sucesso do Ataque (ASR) com intervalos de confiança de 95\\% na amostra estratificada com repeti\\c{c}\\~oes. A amostra utiliza \\(k=30\\) casos por paradigma e \\(r=5\\) repeti\\c{c}\\~oes por unidade amostrada.}",
+  "\\label{fig:stratified-asr-ci}",
+  "\\end{figure*}"
+)
+writeLines(latex_figure, tex_path, useBytes = TRUE)
+```
+
+The confidence-interval figure was exported to `stratified_asr_ci.png`. A
+LaTeX figure snippet was exported to `stratified_asr_ci_figure.tex`.
+
+```{r include-figure, echo=FALSE, out.width='100%'}
+knitr::include_graphics(image_path)
+```
+
+## Figure With Setting Separators
+
+```{r draw-separated-figure}
+plot_data <- asr_cells
+
+grDevices::png(
+  filename = setting_image_path,
+  width = 3600,
+  height = 1650,
+  res = 220
+)
+
+old_par <- par(no.readonly = TRUE)
+on.exit(par(old_par), add = TRUE)
+
+layout(matrix(c(1, 2, 3, 4, 4, 4), nrow = 2, byrow = TRUE), heights = c(7, 1.05))
+par(oma = c(0, 0, 2.2, 0))
+
+model_offsets <- c(0.16, 0, -0.16)
+names(model_offsets) <- model_order
+setting_positions <- c(
+  "base" = 2.45,
+  "enhanced-important" = 1.70,
+  "enhanced-ignore" = 0.95
+)
+names(setting_positions) <- setting_order
+
+for (panel_index in seq_along(paradigm_order)) {
+  paradigm <- paradigm_order[panel_index]
+  subset_rows <- plot_data[plot_data$paradigm == paradigm, ]
+  subset_rows <- subset_rows[order(subset_rows$setting, subset_rows$model), ]
+  subset_rows$y <- setting_positions[as.character(subset_rows$setting)] +
+    model_offsets[as.character(subset_rows$model)]
+
+  if (panel_index == 1) {
+    par(mar = c(4.5, 7.2, 3.2, 1.1))
+  } else {
+    par(mar = c(4.5, 1.2, 3.2, 1.1))
+  }
+
+  plot(
+    NA,
+    xlim = c(0, 100),
+    ylim = c(0.55, 2.85),
+    xlab = "",
+    ylab = "",
+    yaxt = "n",
+    main = "",
+    bty = "n",
+    cex.lab = 0.9,
+    cex.main = 1.1
+  )
+  mtext(
+    unname(paradigm_labels[paradigm]),
+    side = 3,
+    line = 1.0,
+    font = 2,
+    cex = 1.45
+  )
+  if (panel_index == 2) {
+    mtext(
+      "ASR (%) com IC 95% de Wilson",
+      side = 1,
+      line = 4.5,
+      font = 2,
+      cex = 1.35
+    )
+  }
+  axis(1, at = seq(0, 100, by = 20), las = 1, cex.axis = 0.85)
+  if (panel_index == 1) {
+    axis(
+      2,
+      at = setting_positions,
+      labels = FALSE,
+      las = 1,
+      tick = FALSE
+    )
+  }
+
+  rect(
+    xleft = -5,
+    ybottom = setting_positions["base"] - 0.32,
+    xright = 105,
+    ytop = setting_positions["base"] + 0.32,
+    col = "gray97",
+    border = NA
+  )
+  rect(
+    xleft = -5,
+    ybottom = setting_positions["enhanced-important"] - 0.32,
+    xright = 105,
+    ytop = setting_positions["enhanced-important"] + 0.32,
+    col = "gray99",
+    border = NA
+  )
+  rect(
+    xleft = -5,
+    ybottom = setting_positions["enhanced-ignore"] - 0.32,
+    xright = 105,
+    ytop = setting_positions["enhanced-ignore"] + 0.32,
+    col = "gray97",
+    border = NA
+  )
+  abline(v = seq(0, 100, by = 20), col = "gray90", lwd = 0.8)
+  abline(h = setting_positions, col = "gray88", lwd = 0.8)
+  if (panel_index == 1) {
+    text(
+      x = par("usr")[1] - 2.5,
+      y = setting_positions,
+      labels = unname(setting_labels[setting_order]),
+      xpd = NA,
+      adj = 1,
+      font = 2,
+      cex = 1.05
+    )
+  }
+
+  for (i in seq_len(nrow(subset_rows))) {
+    row <- subset_rows[i, ]
+    x <- 100 * row$asr
+    low <- 100 * row$ci95_low
+    high <- 100 * row$ci95_high
+    y <- row$y
+    model_name <- as.character(row$model)
+    segments(low, y, high, y, col = point_cols[model_name], lwd = 1.8)
+    segments(low, y - 0.08, low, y + 0.08, col = point_cols[model_name], lwd = 1.2)
+    segments(high, y - 0.08, high, y + 0.08, col = point_cols[model_name], lwd = 1.2)
+    points(
+      x,
+      y,
+      pch = point_shapes[model_name],
+      col = point_cols[model_name],
+      bg = point_cols[model_name],
+      cex = 1.05
+    )
+    text(
+      min(99, high + 3.2),
+      y,
+      paste0(as_percent(row$asr), "%"),
+      cex = 0.66,
+      adj = 0
+    )
+  }
+}
+
+par(mar = c(0, 0, 0, 0))
+plot.new()
+legend(
+  "center",
+  legend = unname(model_labels[model_order]),
+  pch = point_shapes[model_order],
+  col = point_cols[model_order],
+  pt.cex = 1.2,
+  bty = "n",
+  horiz = TRUE,
+  x.intersp = 1.0,
+  text.width = strwidth("DeepSeek-V4-Flash") * 1.15
+)
+
+
+
+grDevices::dev.off()
+
+latex_setting_figure <- c(
+  "% Required package: \\usepackage{graphicx}",
+  "\\begin{figure*}[t]",
+  "\\centering",
+  paste0("\\includegraphics[width=\\textwidth]{", basename(setting_image_path), "}"),
+  "\\caption{Taxa de Sucesso do Ataque (ASR) com intervalos de confiança de 95\\% na amostra estratificada com repeti\\c{c}\\~oes. Faixas alternadas destacam as configura\\c{c}\\~oes de apresenta\\c{c}\\~ao Base, Enhanced 1 e Enhanced 2.}",
+  "\\label{fig:stratified-asr-ci-setting-separators}",
+  "\\end{figure*}"
+)
+writeLines(latex_setting_figure, setting_tex_path, useBytes = TRUE)
+```
+
+The separator-focused confidence-interval figure was exported to
+`stratified_asr_ci_by_setting.png`. A LaTeX figure snippet was exported to
+`stratified_asr_ci_by_setting_figure.tex`.
+
+```{r include-setting-figure, echo=FALSE, out.width='100%'}
+knitr::include_graphics(setting_image_path)
+```
+
+## Cell Summary
+
+```{r cell-summary}
+display_cells <- asr_cells
+display_cells$Model <- unname(model_labels[as.character(display_cells$model)])
+display_cells$Paradigm <- unname(paradigm_labels[as.character(display_cells$paradigm)])
+display_cells$Setting <- unname(setting_labels[as.character(display_cells$setting)])
+display_cells$ASR <- paste0(as_percent(display_cells$asr), "\\%")
+display_cells$`95\\% CI` <- paste0(
+  "[", as_percent(display_cells$ci95_low), "\\%, ",
+  as_percent(display_cells$ci95_high), "\\%]"
+)
+
+knitr::kable(
+  display_cells[, c("Model", "Paradigm", "Setting", "valid", "success", "ASR", "95\\% CI", "invalid")],
+  col.names = c("Model", "Paradigm", "Setting", "Valid", "Success", "ASR", "95\\% CI", "Invalid"),
+  align = c("l", "c", "l", "r", "r", "r", "c", "r")
+)
+```

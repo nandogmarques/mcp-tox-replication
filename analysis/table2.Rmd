@@ -1,0 +1,421 @@
+---
+title: "MCPTox - Reproduction of Table 2"
+output: md_document
+params:
+  report_dir: "../data/reports/full-benchmark"
+  expected_cases_per_model: 485
+  strict_full_benchmark: false
+  models: null
+  drop_models_without_valid_outputs: false
+  table_image_path: null
+  table_tex_path: null
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+required_packages <- c("jsonlite", "knitr")
+missing_packages <- required_packages[
+  !vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)
+]
+if (length(missing_packages) > 0) {
+  stop(
+    "Missing R packages: ", paste(missing_packages, collapse = ", "),
+    ". Install them with install.packages(c(",
+    paste(sprintf("'%s'", missing_packages), collapse = ", "), "))."
+  )
+}
+
+setting_order <- c("base", "enhanced-important", "enhanced-ignore")
+setting_labels <- c(
+  "base" = "Base Setting",
+  "enhanced-important" = "Enhanced Setting 1",
+  "enhanced-ignore" = "Enhanced Setting 2"
+)
+paradigm_order <- c("Template-1", "Template-2", "Template-3")
+paradigm_labels <- c("Template-1" = "P1", "Template-2" = "P2", "Template-3" = "P3")
+
+model_metadata <- data.frame(
+  model = c("gpt-4o-mini", "gemini-2.5-flash", "deepseek-v4-flash"),
+  Family = c("GPT", "Gemini", "DeepSeek"),
+  `LLM Agent` = c("GPT-4o-mini", "Gemini-2.5-flash", "DeepSeek-V4-Flash"),
+  Reasoning = c("No", "Yes", "Yes"),
+  stringsAsFactors = FALSE,
+  check.names = FALSE
+)
+
+as_percent <- function(value) {
+  ifelse(is.na(value), "NA", sprintf("%.1f", 100 * value))
+}
+```
+
+## Input
+
+```{r load-results}
+if (is.null(params$report_dir) || !nzchar(params$report_dir)) {
+  stop(
+    "Set params$report_dir to a generated MCPTox report directory, for example ",
+    "'../data/reports/full-benchmark'."
+  )
+}
+
+report_dir <- normalizePath(params$report_dir, mustWork = TRUE)
+json_path <- file.path(report_dir, "results.json")
+csv_path <- file.path(report_dir, "results.csv")
+
+if (file.exists(csv_path)) {
+  results <- read.csv(csv_path, stringsAsFactors = FALSE, check.names = FALSE)
+} else if (file.exists(json_path)) {
+  payload <- jsonlite::fromJSON(json_path, simplifyDataFrame = TRUE)
+  results <- payload$results
+} else {
+  stop("Neither results.csv nor results.json was found in ", report_dir, ".")
+}
+
+required_columns <- c("model", "setting", "paradigm", "label", "case_id")
+missing_columns <- setdiff(required_columns, names(results))
+if (length(missing_columns) > 0) {
+  stop(
+    "This report predates Table 2 support. Missing columns: ",
+    paste(missing_columns, collapse = ", "),
+    ". Generate a new report with the updated run_experiment.py."
+  )
+}
+
+unknown_settings <- setdiff(unique(results$setting), setting_order)
+unknown_paradigms <- setdiff(unique(results$paradigm), paradigm_order)
+if (length(unknown_settings) > 0) {
+  stop("Unknown settings in report: ", paste(unknown_settings, collapse = ", "))
+}
+if (length(unknown_paradigms) > 0) {
+  stop("Unknown paradigms in report: ", paste(unknown_paradigms, collapse = ", "))
+}
+
+results$valid <- !(results$label %in% c("None", "Error"))
+results$success <- results$label == "Success"
+
+available_models <- unique(results$model)
+if (!is.null(params$models)) {
+  requested_models <- as.character(unlist(params$models))
+  unavailable_models <- setdiff(requested_models, available_models)
+  if (length(unavailable_models) > 0) {
+    stop(
+      "Requested models are not present in this report: ",
+      paste(unavailable_models, collapse = ", "),
+      ". Available models: ", paste(available_models, collapse = ", "), "."
+    )
+  }
+  results <- results[results$model %in% requested_models, ]
+}
+
+if (isTRUE(params$drop_models_without_valid_outputs)) {
+  valid_models <- unique(results$model[results$valid])
+  removed_models <- setdiff(unique(results$model), valid_models)
+  if (length(removed_models) > 0) {
+    cat(
+      "Excluded models without valid outputs: ",
+      paste(removed_models, collapse = ", "), "  \n",
+      sep = ""
+    )
+  }
+  results <- results[results$model %in% valid_models, ]
+}
+
+if (nrow(results) == 0 || length(unique(results$model)) == 0) {
+  stop("No model with matching results remains after applying model filters.")
+}
+
+cat("Report: `", report_dir, "`  \n", sep = "")
+cat("Rows: ", nrow(results), "  \n", sep = "")
+cat("Models: ", paste(unique(results$model), collapse = ", "), "  \n", sep = "")
+```
+
+## Coverage
+
+The article calculates ASR as successful attacks divided by valid outputs.
+`None` and `Error` rows are therefore excluded from the denominator.
+
+```{r coverage, warning=TRUE}
+coverage_grid <- expand.grid(
+  model = unique(results$model),
+  setting = setting_order,
+  paradigm = paradigm_order,
+  stringsAsFactors = FALSE
+)
+
+coverage_rows <- lapply(seq_len(nrow(coverage_grid)), function(index) {
+  key <- coverage_grid[index, ]
+  subset_rows <- results[
+    results$model == key$model &
+      results$setting == key$setting &
+      results$paradigm == key$paradigm,
+  ]
+  data.frame(
+    Model = key$model,
+    Setting = unname(setting_labels[key$setting]),
+    Paradigm = unname(paradigm_labels[key$paradigm]),
+    Cases = length(unique(subset_rows$case_id)),
+    Total = nrow(subset_rows),
+    Valid = sum(subset_rows$valid),
+    Invalid = sum(!subset_rows$valid),
+    Success = sum(subset_rows$success & subset_rows$valid),
+    stringsAsFactors = FALSE
+  )
+})
+coverage <- do.call(rbind, coverage_rows)
+
+knitr::kable(coverage, align = c("l", "l", "c", "r", "r", "r", "r", "r"))
+
+cases_per_model <- aggregate(case_id ~ model, results, function(values) length(unique(values)))
+incomplete_models <- cases_per_model$model[
+  cases_per_model$case_id < params$expected_cases_per_model
+]
+missing_cells <- coverage$Total == 0
+cells_without_valid_outputs <- coverage$Valid == 0
+
+if (any(missing_cells)) {
+  warning("At least one model/setting/paradigm cell has no observations.")
+}
+if (any(cells_without_valid_outputs)) {
+  warning(
+    "At least one model/setting/paradigm cell has observations but no valid outputs. ",
+    "Inspect the Error labels before interpreting Table 2."
+  )
+}
+if (length(incomplete_models) > 0) {
+  warning(
+    "This is not a full-benchmark report for: ",
+    paste(incomplete_models, collapse = ", "),
+    ". Use --all for direct comparison with the article."
+  )
+}
+if (isTRUE(params$strict_full_benchmark) &&
+    (any(missing_cells) || any(cells_without_valid_outputs) || length(incomplete_models) > 0)) {
+  stop("strict_full_benchmark is enabled and report coverage is incomplete.")
+}
+```
+
+## Table 2
+
+ASR values are percentages. `Avg.` is the aggregate ASR across all valid
+outputs for the model, which weights each cell by its valid-output count as in
+the article. It is only calculated when all nine cells have valid outputs. `NA`
+indicates missing or invalid data.
+
+```{r table-two, include=FALSE}
+calculate_asr <- function(model_name, setting_name, paradigm_name) {
+  rows <- results[
+    results$model == model_name &
+      results$setting == setting_name &
+      results$paradigm == paradigm_name,
+  ]
+  valid_rows <- rows[rows$valid, ]
+  if (nrow(valid_rows) == 0) return(NA_real_)
+  sum(valid_rows$success) / nrow(valid_rows)
+}
+
+models <- unique(results$model)
+table_rows <- lapply(models, function(model_name) {
+  metadata <- model_metadata[model_metadata$model == model_name, ]
+  if (nrow(metadata) == 0) {
+    metadata <- data.frame(
+      model = model_name, Family = "Other", `LLM Agent` = model_name,
+      Reasoning = "Unknown", stringsAsFactors = FALSE, check.names = FALSE
+    )
+  }
+
+  values <- vapply(setting_order, function(setting_name) {
+    vapply(paradigm_order, function(paradigm_name) {
+      calculate_asr(model_name, setting_name, paradigm_name)
+    }, numeric(1))
+  }, numeric(length(paradigm_order)))
+  values <- as.vector(values)
+  model_rows <- results[results$model == model_name, ]
+  model_valid_rows <- model_rows[model_rows$valid, ]
+  aggregate_asr <- if (nrow(model_valid_rows) == 0) {
+    NA_real_
+  } else {
+    sum(model_valid_rows$success) / nrow(model_valid_rows)
+  }
+
+  data.frame(
+    Family = metadata$Family[1],
+    `LLM Agent` = metadata$`LLM Agent`[1],
+    Reasoning = metadata$Reasoning[1],
+    `Base P1` = as_percent(values[1]),
+    `Base P2` = as_percent(values[2]),
+    `Base P3` = as_percent(values[3]),
+    `Enhanced 1 P1` = as_percent(values[4]),
+    `Enhanced 1 P2` = as_percent(values[5]),
+    `Enhanced 1 P3` = as_percent(values[6]),
+    `Enhanced 2 P1` = as_percent(values[7]),
+    `Enhanced 2 P2` = as_percent(values[8]),
+    `Enhanced 2 P3` = as_percent(values[9]),
+    `Avg.` = as_percent(if (any(is.na(values))) NA_real_ else aggregate_asr),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+})
+
+table_two <- do.call(rbind, table_rows)
+known_order <- match(table_two$`LLM Agent`, model_metadata$`LLM Agent`)
+table_two <- table_two[order(is.na(known_order), known_order), ]
+row.names(table_two) <- NULL
+
+table_image_path <- params$table_image_path
+if (is.null(table_image_path) || !nzchar(table_image_path)) {
+  table_image_path <- file.path(report_dir, "table2.png")
+}
+table_image_path <- normalizePath(
+  table_image_path,
+  mustWork = FALSE
+)
+dir.create(dirname(table_image_path), recursive = TRUE, showWarnings = FALSE)
+
+table_tex_path <- params$table_tex_path
+if (is.null(table_tex_path) || !nzchar(table_tex_path)) {
+  table_tex_path <- file.path(report_dir, "table2.tex")
+}
+table_tex_path <- normalizePath(table_tex_path, mustWork = FALSE)
+dir.create(dirname(table_tex_path), recursive = TRUE, showWarnings = FALSE)
+
+latex_escape <- function(value) {
+  value <- gsub("\\\\", "\\\\textbackslash{}", value)
+  value <- gsub("([%&#_$])", "\\\\\\1", value, perl = TRUE)
+  value <- gsub("~", "\\\\textasciitilde{}", value, fixed = TRUE)
+  value <- gsub("\\^", "\\\\textasciicircum{}", value)
+  value
+}
+
+latex_rows <- apply(table_two, 1, function(row) {
+  paste(paste(vapply(row, latex_escape, character(1)), collapse = " & "), "\\\\")
+})
+
+latex_table <- c(
+  "% Required packages: \\usepackage{booktabs} and \\usepackage{graphicx}",
+  "\\begin{table*}[t]",
+  "\\centering",
+  "\\caption{Attack success rate (ASR, \\%) by model, attack setting, and paradigm.}",
+  "\\label{tab:mcptox-asr}",
+  "\\resizebox{\\textwidth}{!}{%",
+  "\\begin{tabular}{lllrrrrrrrrrr}",
+  "\\toprule",
+  paste0(
+    "Family & LLM Agent & Reasoning & ",
+    "\\multicolumn{3}{c}{Base Setting} & ",
+    "\\multicolumn{3}{c}{Enhanced Setting 1} & ",
+    "\\multicolumn{3}{c}{Enhanced Setting 2} & Avg. \\\\"
+  ),
+  "\\cmidrule(lr){4-6} \\cmidrule(lr){7-9} \\cmidrule(lr){10-12}",
+  paste(" &  &  & P1 & P2 & P3 & P1 & P2 & P3 & P1 & P2 & P3 & ", "\\\\"),
+  "\\midrule",
+  latex_rows,
+  "\\bottomrule",
+  "\\end{tabular}%",
+  "}",
+  "\\end{table*}"
+)
+writeLines(latex_table, table_tex_path, useBytes = TRUE)
+
+grDevices::png(
+  filename = table_image_path,
+  width = 4200,
+  height = max(1100, 600 + 260 * nrow(table_two)),
+  res = 220
+)
+grid::grid.newpage()
+
+# Draw a two-level header matching the organization of Table 2 in the paper.
+column_weights <- c(1.25, 2.15, 1.25, rep(0.85, 9), 0.95)
+x_edges <- c(0, cumsum(column_weights) / sum(column_weights))
+row_height <- 1 / (nrow(table_two) + 2)
+
+draw_cell <- function(column_start, column_end, y_bottom, y_top, label,
+                      fill = "white", fontface = "plain", fontsize = 10,
+                      border = NA, lwd = 1) {
+  x_left <- x_edges[column_start]
+  x_right <- x_edges[column_end + 1]
+  grid::grid.rect(
+    x = grid::unit((x_left + x_right) / 2, "npc"),
+    y = grid::unit((y_bottom + y_top) / 2, "npc"),
+    width = grid::unit(x_right - x_left, "npc"),
+    height = grid::unit(y_top - y_bottom, "npc"),
+    gp = grid::gpar(fill = fill, col = border, lwd = lwd)
+  )
+  grid::grid.text(
+    label,
+    x = grid::unit((x_left + x_right) / 2, "npc"),
+    y = grid::unit((y_bottom + y_top) / 2, "npc"),
+    gp = grid::gpar(fontface = fontface, fontsize = fontsize, col = "black")
+  )
+}
+
+header_fill <- "white"
+draw_cell(1, 1, 1 - 2 * row_height, 1, "Family", header_fill, "bold", 11, lwd = 1.4)
+draw_cell(2, 2, 1 - 2 * row_height, 1, "LLM Agent", header_fill, "bold", 11, lwd = 1.4)
+draw_cell(3, 3, 1 - 2 * row_height, 1, "Reasoning", header_fill, "bold", 11, lwd = 1.4)
+draw_cell(4, 6, 1 - row_height, 1, "Base Setting", header_fill, "bold", 11, lwd = 1.4)
+draw_cell(7, 9, 1 - row_height, 1, "Enhanced Setting 1", header_fill, "bold", 11, lwd = 1.4)
+draw_cell(10, 12, 1 - row_height, 1, "Enhanced Setting 2", header_fill, "bold", 11, lwd = 1.4)
+draw_cell(13, 13, 1 - 2 * row_height, 1, "Avg.", header_fill, "bold", 11, lwd = 1.4)
+
+for (column in 4:12) {
+  draw_cell(
+    column, column, 1 - 2 * row_height, 1 - row_height,
+    paste0("P", ((column - 4) %% 3) + 1), header_fill, "bold", 10, lwd = 1.2
+  )
+}
+
+for (row_index in seq_len(nrow(table_two))) {
+  y_top <- 1 - (row_index + 1) * row_height
+  y_bottom <- y_top - row_height
+  row_fill <- "white"
+  for (column in seq_len(ncol(table_two))) {
+    draw_cell(
+      column, column, y_bottom, y_top,
+      as.character(table_two[row_index, column]), row_fill,
+      "plain", 10
+    )
+  }
+}
+
+draw_rule <- function(x_start, x_end, y, lwd = 1) {
+  grid::grid.lines(
+    x = grid::unit(c(x_edges[x_start], x_edges[x_end + 1]), "npc"),
+    y = grid::unit(c(y, y), "npc"),
+    gp = grid::gpar(col = "black", lwd = lwd)
+  )
+}
+
+# Academic-style rules without colors, a vertical grid, or row decoration.
+draw_rule(1, 13, 1, 2)
+draw_rule(4, 6, 1 - row_height, 1)
+draw_rule(7, 9, 1 - row_height, 1)
+draw_rule(10, 12, 1 - row_height, 1)
+draw_rule(1, 13, 1 - 2 * row_height, 1.5)
+draw_rule(1, 13, 0, 2)
+grDevices::dev.off()
+```
+
+The table was exported to `table2.tex` for Overleaf and to `table2.png` for
+previewing.
+
+```{r table-two-image, echo=FALSE, out.width='100%'}
+knitr::include_graphics(table_image_path)
+```
+
+**Reasoning note.** The article evaluated DeepSeek-R1, while this reproduction
+uses the separately configured `deepseek-v4-flash` endpoint. It is reported as
+`Yes` because responses from the endpoint expose both `reasoning_content` and a
+positive `completion_tokens_details.reasoning_tokens` count. This establishes
+that reasoning was active in the evaluated endpoint, although it remains a
+different model from the DeepSeek-R1 used in the article.
+
+## Label distribution
+
+```{r labels}
+label_distribution <- as.data.frame(table(results$model, results$label), stringsAsFactors = FALSE)
+names(label_distribution) <- c("Model", "Label", "Count")
+label_distribution <- label_distribution[label_distribution$Count > 0, ]
+knitr::kable(label_distribution, align = c("l", "l", "r"))
+```

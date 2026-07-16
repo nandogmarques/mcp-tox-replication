@@ -1,0 +1,172 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gemini-proxy-config
+  namespace: default
+data:
+  nginx.conf: |
+    events {}
+    http {
+      server {
+        listen 80;
+        location /v1/ {
+          # O Nginx reescreve a URL e envia para o Google via HTTPS
+          proxy_pass https://generativelanguage.googleapis.com/v1beta/openai/;
+          proxy_ssl_server_name on;
+        }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gemini-proxy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gemini-proxy
+  template:
+    metadata:
+      labels:
+        app: gemini-proxy
+    spec:
+      containers:
+      - name: proxy
+        image: nginx:alpine
+        volumeMounts:
+        - name: config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+      volumes:
+      - name: config
+        configMap:
+          name: gemini-proxy-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gemini-proxy-svc
+  namespace: default
+spec:
+  selector:
+    app: gemini-proxy
+  ports:
+  - port: 80
+    targetPort: 80
+
+---
+# 3. Backend do Envoy (Apontando para o Service interno do Nginx)
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: gemini-proxy-backend
+  namespace: default
+spec:
+  endpoints:
+    - fqdn:
+        hostname: gemini-proxy-svc.default.svc.cluster.local
+        port: 80
+
+---
+# 4. Rota do Envoy AI Gateway (AIGatewayRoute)
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIGatewayRoute
+metadata:
+  name: envoy-ai-gateway-basic-gemini
+  namespace: default
+spec:
+  llmRequestCosts:
+    - metadataKey: llm_input_token
+      type: InputToken
+    - metadataKey: llm_cached_input_token
+      type: CachedInputToken
+    - metadataKey: llm_output_token
+      type: OutputToken
+    - metadataKey: llm_total_token
+      type: TotalToken
+  parentRefs:
+    - name: envoy-ai-gateway-basic
+      kind: Gateway
+      group: gateway.networking.k8s.io
+  rules:
+    - matches:
+        - headers:
+            - type: Exact
+              name: x-ai-eg-model
+              value: gemini-2.5-flash
+      backendRefs:
+        - name: envoy-ai-gateway-basic-gemini
+
+---
+# 5. Serviço Backend da AI (AIServiceBackend)
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIServiceBackend
+metadata:
+  name: envoy-ai-gateway-basic-gemini
+  namespace: default
+spec:
+  schema:
+    name: OpenAI
+  backendRef:
+    name: gemini-proxy-backend
+    kind: Backend
+    group: gateway.envoyproxy.io
+
+---
+# 6. Política de Segurança (Injeção da Chave na requisição)
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: BackendSecurityPolicy
+metadata:
+  name: envoy-ai-gateway-basic-gemini-apikey
+  namespace: default
+spec:
+  targetRefs:
+    - group: aigateway.envoyproxy.io
+      kind: AIServiceBackend
+      name: envoy-ai-gateway-basic-gemini
+  type: APIKey
+  apiKey:
+    secretRef:
+      name: envoy-ai-gateway-basic-gemini-apikey
+      namespace: default
+
+---
+# 7. Rate limiting para o benchmark completo (1.455 chamadas por modelo)
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: gemini-model-specific-token-limit-policy
+  namespace: default
+spec:
+  targetRefs:
+    - name: envoy-ai-gateway-basic
+      kind: Gateway
+      group: gateway.networking.k8s.io
+  rateLimit:
+    type: Global
+    global:
+      rules:
+        - clientSelectors:
+            - headers:
+                - name: x-tenant-id
+                  type: Distinct
+                - name: x-ai-eg-model
+                  type: Exact
+                  value: gemini-2.5-flash
+          limit:
+            requests: 2000
+            unit: Hour
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: envoy-ai-gateway-basic-gemini-apikey
+  namespace: default
+type: Opaque
+stringData:
+  apiKey: "${GEMINI_API_KEY}"
+
+  

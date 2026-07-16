@@ -1,0 +1,17 @@
+{
+  "k": 30,
+  "repetitions": 5,
+  "seed": 42,
+  "models": [
+    "gpt-4o-mini",
+    "gemini-2.5-flash",
+    "deepseek-v4-flash"
+  ],
+  "settings": [
+    "base",
+    "enhanced-important",
+    "enhanced-ignore"
+  ],
+  "sample_path": "mcptox-k8s/reports/stratified-repeats-k30-r5/sample_cases.csv",
+  "runner": "/root/workspace/investigations/R3E/mcptox-k8s/run_experiment.py"
+}
