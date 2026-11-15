@@ -95,7 +95,7 @@ spec:
         - headers:
             - type: Exact
               name: x-ai-eg-model
-              value: gemini-2.5-flash
+              value: ${GEMINI_MODEL}
       backendRefs:
         - name: envoy-ai-gateway-basic-gemini
 
@@ -154,19 +154,7 @@ spec:
                   type: Distinct
                 - name: x-ai-eg-model
                   type: Exact
-                  value: gemini-2.5-flash
+                  value: ${GEMINI_MODEL}
           limit:
-            requests: 2000
+            requests: ${RATE_LIMIT_REQUESTS_PER_HOUR}
             unit: Hour
-
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: envoy-ai-gateway-basic-gemini-apikey
-  namespace: default
-type: Opaque
-stringData:
-  apiKey: "${GEMINI_API_KEY}"
-
-  

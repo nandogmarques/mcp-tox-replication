@@ -1,0 +1,94 @@
+# Azure OpenAI / Microsoft Foundry route for ONE model deployment.
+# Renderizado por scripts/apply-azure-route.sh (variáveis lidas do .env); não aplique este
+# arquivo diretamente. Variáveis:
+#   AZURE_MODEL           nome do *deployment* (valor do header x-ai-eg-model
+#                         e do campo "model" enviado pelo runner)
+#   AZURE_ENDPOINT_HOST   host do recurso, sem esquema/caminho
+#                         (ex.: meu-recurso.openai.azure.com)
+#   AZURE_API_VERSION     query param api-version da Azure
+#   AZURE_ROUTE           sufixo dos nomes dos recursos Kubernetes
+#   (a chave AZURE_OPENAI_API_KEY não entra aqui: o script cria o Secret direto)
+#
+# Diferenças em relação a openai.yaml: schema AzureOpenAI e política de
+# segurança AzureAPIKey (a Azure autentica pelo header "api-key", não por
+# "Authorization: Bearer").
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIGatewayRoute
+metadata:
+  name: envoy-ai-gateway-basic-azure-openai-${AZURE_ROUTE}
+  namespace: default
+spec:
+  llmRequestCosts:
+    - metadataKey: llm_input_token
+      type: InputToken
+    - metadataKey: llm_output_token
+      type: OutputToken
+    - metadataKey: llm_total_token
+      type: TotalToken
+  parentRefs:
+    - name: envoy-ai-gateway-basic
+      kind: Gateway
+      group: gateway.networking.k8s.io
+  rules:
+    - matches:
+        - headers:
+            - type: Exact
+              name: x-ai-eg-model
+              value: ${AZURE_MODEL}
+      backendRefs:
+        - name: envoy-ai-gateway-basic-azure-openai-${AZURE_ROUTE}
+---
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIServiceBackend
+metadata:
+  name: envoy-ai-gateway-basic-azure-openai-${AZURE_ROUTE}
+  namespace: default
+spec:
+  schema:
+    name: AzureOpenAI
+    version: "${AZURE_API_VERSION}"
+  backendRef:
+    name: envoy-ai-gateway-basic-azure-openai-${AZURE_ROUTE}
+    kind: Backend
+    group: gateway.envoyproxy.io
+---
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: BackendSecurityPolicy
+metadata:
+  name: envoy-ai-gateway-basic-azure-openai-${AZURE_ROUTE}-apikey
+  namespace: default
+spec:
+  targetRefs:
+    - group: aigateway.envoyproxy.io
+      kind: AIServiceBackend
+      name: envoy-ai-gateway-basic-azure-openai-${AZURE_ROUTE}
+  type: AzureAPIKey
+  azureAPIKey:
+    secretRef:
+      name: envoy-ai-gateway-basic-azure-openai-${AZURE_ROUTE}-apikey
+      namespace: default
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: envoy-ai-gateway-basic-azure-openai-${AZURE_ROUTE}
+  namespace: default
+spec:
+  endpoints:
+    - fqdn:
+        hostname: ${AZURE_ENDPOINT_HOST}
+        port: 443
+---
+apiVersion: gateway.networking.k8s.io/v1alpha3
+kind: BackendTLSPolicy
+metadata:
+  name: envoy-ai-gateway-basic-azure-openai-${AZURE_ROUTE}-tls
+  namespace: default
+spec:
+  targetRefs:
+    - group: "gateway.envoyproxy.io"
+      kind: Backend
+      name: envoy-ai-gateway-basic-azure-openai-${AZURE_ROUTE}
+  validation:
+    wellKnownCACertificates: "System"
+    hostname: ${AZURE_ENDPOINT_HOST}

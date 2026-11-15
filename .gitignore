@@ -6,4 +6,8 @@ __pycache__/
 .Rhistory
 .RData
 .Rproj.user/
-mcptox-k8s/reports/
+mcptox-k8s/config.yaml
+manifests/rendered/
+reports/
+src/config.yaml
+MCPTox-Benchmark
