@@ -1,0 +1,40 @@
+# Configuracao compartilhada para run_experiment.py (--config config.yaml) e
+# run_stratified_repeats.py (--config config.yaml). Todos os modelos passam
+# pelo mesmo Envoy AI Gateway; o que os diferencia e o header x-ai-eg-model
+# enviado por chamada, nao o endpoint.
+#
+# Qualquer flag equivalente na linha de comando (--gateway-url, --namespace
+# etc.) sobrescreve o valor definido aqui.
+
+# Obrigatorio (ou defina GATEWAY_URL / passe --gateway-url).
+gateway_url: http://localhost:8080
+
+# Opcionais; os valores abaixo sao os defaults do runner quando omitidos.
+# mcp_url: http://localhost:8080/mcp
+# namespace: default
+# gateway_name: envoy-ai-gateway-basic
+# mcp_path: /mcp
+# image: nandogmarques/mcptox-wrapper:1
+
+# Selecao de casos: equivalente a --case/--random/--all na CLI. Exatamente
+# um dos tres deve estar definido (aqui ou na CLI) -- sem isso o runner falha
+# pedindo pra escolher um. Se qualquer um dos tres for passado na CLI, esta
+# secao inteira e ignorada (nao ha merge campo a campo entre, por exemplo,
+# --case da CLI e "random" definido aqui).
+# case: 1
+# random: 30
+# all: true
+
+# O runner nao envia temperature (nem outros parametros de amostragem): cada
+# modelo usa o proprio default. O paper nao define esses parametros e alguns
+# modelos de raciocinio (ex.: gpt-5-mini) rejeitam valores explicitos.
+
+# Fonte da verdade de quais LLMs testar quando --model nao for passado na CLI.
+# Qualquer nome aceito pelo Envoy AI Gateway serve (o valor e enviado como
+# header x-ai-eg-model e como "model" no corpo da chamada); nao precisa ser um
+# dos tres modelos do paper. Ex.: se seu deployment Azure expoe o backend
+# OpenAI como "gpt-5-mini" em vez de "gpt-4o-mini", liste "gpt-5-mini" aqui.
+models:
+  - gpt-4o-mini
+  - gemini-2.5-flash
+  - deepseek-v4-flash

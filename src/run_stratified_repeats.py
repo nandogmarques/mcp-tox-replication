@@ -14,12 +14,23 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parent
 BENCHMARK = ROOT.parent / "MCPTox-Benchmark"
 RUNNER = ROOT / "run_experiment.py"
 DEFAULT_MODELS = ("gpt-4o-mini", "gemini-2.5-flash", "deepseek-v4-flash")
 DEFAULT_SETTINGS = ("base", "enhanced-important", "enhanced-ignore")
+
+
+def load_config(path: Path | None) -> dict:
+    if not path:
+        return {}
+    config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(config, dict):
+        raise SystemExit(f"{path}: expected a YAML mapping")
+    return config
 
 
 def load_cases_by_paradigm(benchmark_dir: Path) -> dict[str, list[int]]:
@@ -78,10 +89,6 @@ def run_case(args: argparse.Namespace, case_id: str, repetition: int, output_dir
         f"{args.tenant_prefix}-r{repetition}-case{case_id}",
         "--namespace",
         args.namespace,
-        "--gateway-name",
-        args.gateway_name,
-        "--mcp-path",
-        args.mcp_path,
         "--timeout",
         str(args.timeout),
         "--request-retries",
@@ -89,10 +96,16 @@ def run_case(args: argparse.Namespace, case_id: str, repetition: int, output_dir
         "--retry-base-delay",
         str(args.retry_base_delay),
     ]
+    if args.config:
+        command.extend(["--config", str(args.config)])
     if args.gateway_url:
         command.extend(["--gateway-url", args.gateway_url])
     if args.mcp_url:
         command.extend(["--mcp-url", args.mcp_url])
+    if args.gateway_name:
+        command.extend(["--gateway-name", args.gateway_name])
+    if args.mcp_path:
+        command.extend(["--mcp-path", args.mcp_path])
     if args.image:
         command.extend(["--image", args.image])
     if args.skip_deploy:
@@ -141,14 +154,22 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--seed", type=int, default=42)
     result.add_argument("--benchmark-dir", type=Path, default=BENCHMARK)
     result.add_argument("--output-dir", type=Path, required=True)
-    result.add_argument("--models", nargs="+", choices=DEFAULT_MODELS, default=list(DEFAULT_MODELS))
+    result.add_argument("--models", nargs="+", default=None,
+                        help="model(s) to test; defaults to --config's models, "
+                             f"else {list(DEFAULT_MODELS)}")
     result.add_argument("--settings", nargs="+", choices=DEFAULT_SETTINGS, default=list(DEFAULT_SETTINGS))
+    result.add_argument(
+        "--config", type=Path, default=None,
+        help="YAML file with shared run settings (gateway_url, mcp_url, namespace, "
+             "gateway_name, mcp_path, image, models), forwarded to run_experiment.py; "
+             "also used here to default --models when it is not passed explicitly",
+    )
     result.add_argument("--gateway-url", default=None)
     result.add_argument("--mcp-url", default=None)
     result.add_argument("--tenant-prefix", default="mcptox-stat")
     result.add_argument("--namespace", default="default")
-    result.add_argument("--gateway-name", default="envoy-ai-gateway-basic")
-    result.add_argument("--mcp-path", default="/mcp")
+    result.add_argument("--gateway-name", default=None)
+    result.add_argument("--mcp-path", default=None)
     result.add_argument("--image", default=None)
     result.add_argument("--skip-deploy", action="store_true")
     result.add_argument("--skip-mcp-probe", action="store_true")
@@ -168,8 +189,21 @@ def main() -> int:
         raise SystemExit("--repetitions must be positive")
     if args.k < 1:
         raise SystemExit("--k must be positive")
-    if not args.gateway_url and not os.getenv("GATEWAY_URL"):
-        raise SystemExit("set GATEWAY_URL or pass --gateway-url")
+    legacy_flags_set = any((args.gateway_url, args.mcp_url, args.gateway_name, args.mcp_path))
+    if args.config and legacy_flags_set:
+        raise SystemExit(
+            "--config cannot be combined with --gateway-url/--mcp-url/"
+            "--gateway-name/--mcp-path"
+        )
+    config = load_config(args.config)
+    if not args.config and not args.gateway_url and not os.getenv("GATEWAY_URL"):
+        raise SystemExit("set GATEWAY_URL, pass --gateway-url, or use --config")
+    if args.models is None:
+        args.models = config.get("models")
+    if args.models is None:
+        args.models = list(DEFAULT_MODELS)
+    if not args.models or not all(isinstance(model, str) and model for model in args.models):
+        raise SystemExit("models must be a non-empty list of non-empty model names")
     if args.replace_output and args.output_dir.exists():
         shutil.rmtree(args.output_dir)
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -184,6 +218,7 @@ def main() -> int:
         "settings": args.settings,
         "sample_path": str(sample_path),
         "runner": str(RUNNER),
+        "config": str(args.config) if args.config else None,
     }
     (args.output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 

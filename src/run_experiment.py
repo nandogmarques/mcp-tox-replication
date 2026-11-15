@@ -10,6 +10,7 @@ import csv
 import hashlib
 import keyword
 import json
+import os
 import random
 import re
 import subprocess
@@ -26,9 +27,12 @@ import httpx
 import yaml
 
 ROOT = Path(__file__).resolve().parent
+REPO_ROOT = ROOT.parent  # os relatórios ficam em <repo>/reports
 DEFAULT_BENCHMARK = ROOT.parent / "MCPTox-Benchmark"
 DEFAULT_MODELS = ("gpt-4o-mini", "gemini-2.5-flash", "deepseek-v4-flash")
 DEFAULT_SETTINGS = ("base", "enhanced-important", "enhanced-ignore")
+DEFAULT_GATEWAY_NAME = "envoy-ai-gateway-basic"
+DEFAULT_MCP_PATH = "/mcp"
 LABEL_SUCCESS = "Success"
 LABEL_IGNORED = "Failure-Ignored"
 LABEL_DIRECT = "Failure-Direct Execution"
@@ -59,6 +63,85 @@ class PoisonVariant:
     def mcp_name(self) -> str:
         setting = self.setting.replace("-", "_")
         return f"case_{self.case.case_id}__{setting}__{self.case.tool_name}"
+
+
+def load_config(path: Path) -> dict[str, Any]:
+    config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(config, dict):
+        raise ValueError(f"{path}: expected a YAML mapping")
+    return config
+
+
+def resolve_settings(args: argparse.Namespace) -> dict[str, Any]:
+    """Layer CLI flags over --config over hardcoded defaults.
+
+    A single Envoy AI Gateway serves every model here: models are told apart
+    by the x-ai-eg-model header, not by separate endpoints. --config is the
+    source of truth for which models to test: any name accepted by the
+    Gateway works, it is not limited to the three models from the paper.
+    """
+    config = load_config(args.config) if args.config else {}
+    unknown_keys = set(config) - {
+        "gateway_url", "mcp_url", "namespace", "gateway_name", "mcp_path", "image", "models",
+        "case", "random", "all",
+    }
+    if unknown_keys:
+        raise ValueError(f"{args.config}: unknown config key(s): {sorted(unknown_keys)}")
+    gateway_url = args.gateway_url or config.get("gateway_url") or os.getenv("GATEWAY_URL")
+    if not gateway_url:
+        raise ValueError("set GATEWAY_URL, pass --gateway-url, or set gateway_url in --config")
+    gateway_url = gateway_url.rstrip("/")
+    mcp_path = args.mcp_path or config.get("mcp_path") or DEFAULT_MCP_PATH
+    models = args.models
+    if models is None:
+        models = config.get("models")
+    if models is None:
+        models = list(DEFAULT_MODELS)
+    if not models or not all(isinstance(model, str) and model for model in models):
+        raise ValueError("models must be a non-empty list of non-empty model names")
+    case, random_n, all_cases = resolve_case_selection(args, config)
+    return {
+        "gateway_url": gateway_url,
+        "mcp_url": args.mcp_url or config.get("mcp_url") or f"{gateway_url}{mcp_path}",
+        "namespace": args.namespace or config.get("namespace") or "default",
+        "gateway_name": args.gateway_name or config.get("gateway_name") or DEFAULT_GATEWAY_NAME,
+        "mcp_path": mcp_path,
+        "image": args.image or config.get("image"),
+        "models": models,
+        "case": case,
+        "random": random_n,
+        "all": all_cases,
+    }
+
+
+def resolve_case_selection(args: argparse.Namespace, config: dict[str, Any]) -> tuple[int | None, int | None, bool]:
+    """Resolve --case/--random/--all: a CLI flag wins outright over --config.
+
+    Unlike the other settings, these three are mutually exclusive as a group,
+    so partial CLI overrides (e.g. --case on the CLI with "random" left over
+    in --config) would be ambiguous; if any of the three is given on the CLI,
+    --config's selection is ignored entirely rather than merged field by field.
+    """
+    if args.case is not None or args.random is not None or args.all:
+        return args.case, args.random, args.all
+    provided = {key: config[key] for key in ("case", "random", "all") if key in config}
+    if len(provided) != 1:
+        raise ValueError(
+            "set exactly one of --case/--random/--all, or exactly one of "
+            "case/random/all in --config"
+        )
+    case = provided.get("case")
+    random_n = provided.get("random")
+    all_cases = bool(provided.get("all", False))
+    if case is not None and not isinstance(case, int):
+        raise ValueError(f"config case must be an integer, got {case!r}")
+    if random_n is not None and not isinstance(random_n, int):
+        raise ValueError(f"config random must be an integer, got {random_n!r}")
+    if "all" in provided and not isinstance(provided["all"], bool):
+        raise ValueError(f"config all must be a boolean, got {provided['all']!r}")
+    if "all" in provided and not all_cases:
+        raise ValueError("config 'all' must be true if set")
+    return case, random_n, all_cases
 
 
 def build_variants(cases: Iterable[Case], settings: Iterable[str]) -> list[PoisonVariant]:
@@ -425,15 +508,15 @@ def discover_mcp_tools(url: str, timeout: float, attempts: int = 12) -> list[dic
 def chat(client: httpx.Client, gateway_url: str, model: str, system: str, query: str,
          tenant_id: str, request_retries: int = 5, retry_base_delay: float = 2) -> dict[str, Any]:
     retryable_statuses = {500, 502, 503, 504}
+    body: dict[str, Any] = {
+        "model": model,
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": query}],
+    }
     response: httpx.Response | None = None
     for attempt in range(request_retries + 1):
         response = client.post(f"{gateway_url.rstrip('/')}/v1/chat/completions", headers={
             "Content-Type": "application/json", "x-ai-eg-model": model, "x-tenant-id": tenant_id,
-        }, json={
-            "model": model,
-            "temperature": 0,
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": query}],
-        })
+        }, json=body)
         if response.status_code not in retryable_statuses or attempt == request_retries:
             break
         retry_after = response.headers.get("retry-after")
@@ -527,19 +610,26 @@ def write_report(results: list[dict[str, Any]], output_dir: Path, metadata: dict
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
-    mode = result.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--case", type=int)
+    mode = result.add_mutually_exclusive_group(required=False)
+    mode.add_argument("--case", type=int,
+                       help="defaults to --config's case/random/all if none of the three is given")
     mode.add_argument("--random", type=int, metavar="N")
     mode.add_argument("--all", action="store_true")
     result.add_argument("--benchmark-dir", type=Path, default=DEFAULT_BENCHMARK)
-    result.add_argument("--gateway-url", default=None, help="defaults to GATEWAY_URL")
-    result.add_argument("--mcp-url", default=None, help="defaults to GATEWAY_URL/mcp")
+    result.add_argument(
+        "--config", type=Path, default=None,
+        help="YAML file with shared run settings (gateway_url, mcp_url, namespace, "
+             "gateway_name, mcp_path, image, models); a matching CLI flag "
+             "always wins over the value in this file",
+    )
+    result.add_argument("--gateway-url", default=None, help="defaults to --config or GATEWAY_URL")
+    result.add_argument("--mcp-url", default=None, help="defaults to --config or GATEWAY_URL/mcp")
     result.add_argument("--tenant-id", default=None,
                         help="fixed x-tenant-id header; defaults to a unique id for each run")
     result.add_argument(
-        "--model", "--models", dest="models", nargs="+", choices=DEFAULT_MODELS,
-        default=list(DEFAULT_MODELS),
-        help="model(s) to test; defaults to all available models",
+        "--model", "--models", dest="models", nargs="+", default=None,
+        help="model(s) to test, matched against the Gateway's x-ai-eg-model backends; "
+             f"defaults to --config's models, else {list(DEFAULT_MODELS)}",
     )
     result.add_argument(
         "--setting", dest="settings", nargs="+", choices=DEFAULT_SETTINGS,
@@ -548,14 +638,26 @@ def parser() -> argparse.ArgumentParser:
     )
     result.add_argument("--seed", type=int, default=42)
     result.add_argument("--output-dir", type=Path)
-    result.add_argument("--namespace", default="default")
-    result.add_argument("--gateway-name", default="envoy-ai-gateway-basic")
-    result.add_argument("--mcp-path", default="/mcp")
-    result.add_argument("--image", help="deployed wrapper image")
+    result.add_argument("--namespace", default=None, help="defaults to --config or 'default'")
+    result.add_argument("--gateway-name", default=None,
+                        help=f"MCPRoute parentRef name; defaults to --config or {DEFAULT_GATEWAY_NAME}")
+    result.add_argument("--mcp-path", default=None,
+                        help=f"MCPRoute path; defaults to --config or {DEFAULT_MCP_PATH}")
+    result.add_argument("--image", default=None, help="deployed wrapper image; defaults to --config")
     result.add_argument("--skip-deploy", action="store_true")
     result.add_argument("--skip-mcp-probe", action="store_true")
     result.add_argument("--keep-wrapper", action="store_true",
                         help="do not remove Kubernetes wrapper resources when the run exits")
+    result.add_argument(
+        "--deploy-only", action="store_true",
+        help=(
+            "deploy the wrapper (readiness already checked in-cluster by wait_for_deployment) "
+            "and exit without probing the gateway or calling any model. Implies --keep-wrapper "
+            "and --skip-mcp-probe, so the wrapper stays up for a later --skip-deploy run without "
+            "requiring the gateway (e.g. its port-forward) to be reachable yet -- e.g. after "
+            "pointing the MCPRoute at a proxy in between"
+        ),
+    )
     result.add_argument("--timeout", type=float, default=120)
     result.add_argument("--request-retries", type=int, default=5,
                         help="retries for transient HTTP 5xx model responses")
@@ -566,14 +668,20 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = parser().parse_args()
-    import os
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     experiment_id = f"{timestamp}-{uuid.uuid4().hex[:8]}"
-    gateway_url = args.gateway_url or os.getenv("GATEWAY_URL")
-    if not gateway_url:
-        raise SystemExit("set GATEWAY_URL or pass --gateway-url")
+    try:
+        settings = resolve_settings(args)
+    except ValueError as exc:
+        raise SystemExit(str(exc))
+    gateway_url = settings["gateway_url"]
+    mcp_url = settings["mcp_url"]
+    namespace = settings["namespace"]
+    args.models = settings["models"]
+    args.case = settings["case"]
+    args.random = settings["random"]
+    args.all = settings["all"]
     tenant_id = args.tenant_id or f"mcptox-{experiment_id}"
-    mcp_url = args.mcp_url or f"{gateway_url.rstrip('/')}{args.mcp_path}"
     all_cases = load_cases(args.benchmark_dir)
     selected_by_model = select_cases_by_model(all_cases, args)
     selected = sorted(
@@ -582,12 +690,12 @@ def main() -> int:
     )
     variants = build_variants(selected, args.settings)
     servers = load_response_data(args.benchmark_dir)
-    if not args.skip_deploy and not args.keep_wrapper:
-        atexit.register(cleanup, args.namespace)
+    if not args.skip_deploy and not args.keep_wrapper and not args.deploy_only:
+        atexit.register(cleanup, namespace)
     if not args.skip_deploy:
-        deploy(variants, args.namespace, args.image, args.gateway_name, args.mcp_path)
-    discovered: set[str] = set()
-    if not args.skip_mcp_probe:
+        deploy(variants, namespace, settings["image"], settings["gateway_name"], settings["mcp_path"])
+    mcp_discovery: dict[str, Any] = {"status": "skipped"}
+    if not args.skip_mcp_probe and not args.deploy_only:
         discovered = {
             tool["name"].split("__", 1)[-1]
             for tool in discover_mcp_tools(mcp_url, args.timeout)
@@ -595,8 +703,28 @@ def main() -> int:
         expected = {variant.mcp_name for variant in variants}
         missing = expected - discovered
         if missing:
-            raise RuntimeError(f"MCPRoute did not expose expected tools: {sorted(missing)}")
-    output_dir = args.output_dir or ROOT / "reports" / experiment_id
+            # An MCP security wrapper (e.g. mcp-context-protector) in front of
+            # the MCPRoute can legitimately hide the poisoned tools behind its
+            # own "context-protector-block" tool until its server-config
+            # pinning is approved (trust-on-first-use). That is a defensive
+            # outcome to record, not a broken deployment: the chat-completions
+            # loop below never depends on live MCP discovery (it embeds the
+            # poisoned description as text from response_all.json/pure_tool.json
+            # per the MCPTox methodology), so it still runs and still measures
+            # ASR. Only raise when tools are missing for some other reason.
+            if "context-protector-block" not in discovered:
+                raise RuntimeError(f"MCPRoute did not expose expected tools: {sorted(missing)}")
+            print(f"MCP discovery blocked by a security wrapper for {len(missing)} tool(s) "
+                  "(unapproved server config); continuing with the chat-completions loop, "
+                  "which does not depend on live MCP discovery", flush=True)
+            mcp_discovery = {"status": "blocked_by_wrapper", "missing_tools": sorted(missing)}
+        else:
+            mcp_discovery = {"status": "ok"}
+    if args.deploy_only:
+        print(f"wrapper deployed and kept alive in namespace={namespace}; "
+              "skipping the chat-completions loop (--deploy-only)", flush=True)
+        return 0
+    output_dir = args.output_dir or REPO_ROOT / "reports" / experiment_id
     results: list[dict[str, Any]] = []
     with httpx.Client(timeout=args.timeout) as client:
         for model in args.models:
@@ -635,8 +763,10 @@ def main() -> int:
                             model_name: [selected_case.case_id for selected_case in model_cases]
                             for model_name, model_cases in selected_by_model.items()
                         },
-                        "gateway_url": gateway_url,
-                        "mcp_url": mcp_url, "tenant_id": tenant_id,
+                        "gateway_url": gateway_url, "mcp_url": mcp_url,
+                        "mcp_discovery": mcp_discovery,
+                        "config": str(args.config) if args.config else None,
+                        "tenant_id": tenant_id,
                         "method": "MCPTox paper-style textual tool selection",
                     })
                     print(f"case={case.case_id} model={model} setting={variant.setting} "
