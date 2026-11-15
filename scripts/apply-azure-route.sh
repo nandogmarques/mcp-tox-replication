@@ -27,6 +27,15 @@ set +a
 : "${AZURE_MODEL:?Set AZURE_MODEL in .env}"
 : "${AZURE_ENDPOINT_HOST:?Set AZURE_ENDPOINT_HOST in .env}"
 : "${AZURE_OPENAI_API_KEY:?Set AZURE_OPENAI_API_KEY in .env}"
+# Aceita uma URL colada do portal e mantém só o host, que é o que o Backend e o
+# BackendTLSPolicy aceitam.
+host="${AZURE_ENDPOINT_HOST#*://}"; host="${host%%/*}"; host="${host,,}"
+if [[ "$host" != "$AZURE_ENDPOINT_HOST" ]]; then
+  echo "NOTE: using host '$host' from AZURE_ENDPOINT_HOST='$AZURE_ENDPOINT_HOST'." >&2
+fi
+[[ "$host" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$ ]] || {
+  echo "Invalid AZURE_ENDPOINT_HOST: '$host' (expected a hostname such as my-resource.openai.azure.com)." >&2; exit 1; }
+export AZURE_ENDPOINT_HOST="$host"
 export AZURE_API_VERSION="${AZURE_API_VERSION:-2025-03-01-preview}"
 export AZURE_ROUTE="${AZURE_ROUTE:-$(echo "$AZURE_MODEL" | tr '[:upper:]' '[:lower:]' \
   | sed -E 's/[^a-z0-9-]+/-/g; s/^-+//; s/-+$//')}"
