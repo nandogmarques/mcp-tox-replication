@@ -140,9 +140,3 @@ $GATEWAY_URL/v1/chat/completions
 ```sh
 kind delete cluster --name mcptox-cluster
 ```
-
-
-python3 mcptox-k8s/run_experiment.py \
---case 15 \
---model gpt-5-mini \
---setting base
