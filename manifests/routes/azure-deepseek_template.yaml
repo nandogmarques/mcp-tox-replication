@@ -1,0 +1,98 @@
+# DeepSeek provido pelo Microsoft Foundry (Azure) para UM deployment.
+# Renderizado por scripts/apply-azure-deepseek-route.sh (variáveis lidas do
+# .env); não aplique este arquivo diretamente. Variáveis:
+#   FOUNDRY_DEEPSEEK_MODEL          nome do *deployment* no Foundry (ex.:
+#                                   DeepSeek-V4-Flash); valor do header
+#                                   x-ai-eg-model e do campo "model"
+#   FOUNDRY_DEEPSEEK_ENDPOINT_HOST  host do recurso, sem esquema/caminho
+#                                   (ex.: meu-recurso.openai.azure.com)
+#   FOUNDRY_DEEPSEEK_API_VERSION    query param api-version da Azure
+#   FOUNDRY_DEEPSEEK_ROUTE          sufixo dos nomes dos recursos Kubernetes
+#   (a chave não entra aqui: o script cria o Secret direto)
+#
+# Modelos DeepSeek implantados num recurso do Foundry (Azure AI Services) são
+# servidos pelo mesmo endpoint de deployments da Azure OpenAI
+# (/openai/deployments/<deployment>/chat/completions), por isso o schema é
+# AzureOpenAI e a autenticação é AzureAPIKey (header "api-key"), como em
+# azure-openai_template.yaml. Os recursos têm o prefixo "azure-deepseek" para
+# coexistirem com as rotas Azure OpenAI e com a rota DeepSeek direta.
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIGatewayRoute
+metadata:
+  name: envoy-ai-gateway-basic-azure-deepseek-${FOUNDRY_DEEPSEEK_ROUTE}
+  namespace: default
+spec:
+  llmRequestCosts:
+    - metadataKey: llm_input_token
+      type: InputToken
+    - metadataKey: llm_output_token
+      type: OutputToken
+    - metadataKey: llm_total_token
+      type: TotalToken
+  parentRefs:
+    - name: envoy-ai-gateway-basic
+      kind: Gateway
+      group: gateway.networking.k8s.io
+  rules:
+    - matches:
+        - headers:
+            - type: Exact
+              name: x-ai-eg-model
+              value: ${FOUNDRY_DEEPSEEK_MODEL}
+      backendRefs:
+        - name: envoy-ai-gateway-basic-azure-deepseek-${FOUNDRY_DEEPSEEK_ROUTE}
+---
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: AIServiceBackend
+metadata:
+  name: envoy-ai-gateway-basic-azure-deepseek-${FOUNDRY_DEEPSEEK_ROUTE}
+  namespace: default
+spec:
+  schema:
+    name: AzureOpenAI
+    version: "${FOUNDRY_DEEPSEEK_API_VERSION}"
+  backendRef:
+    name: envoy-ai-gateway-basic-azure-deepseek-${FOUNDRY_DEEPSEEK_ROUTE}
+    kind: Backend
+    group: gateway.envoyproxy.io
+---
+apiVersion: aigateway.envoyproxy.io/v1beta1
+kind: BackendSecurityPolicy
+metadata:
+  name: envoy-ai-gateway-basic-azure-deepseek-${FOUNDRY_DEEPSEEK_ROUTE}-apikey
+  namespace: default
+spec:
+  targetRefs:
+    - group: aigateway.envoyproxy.io
+      kind: AIServiceBackend
+      name: envoy-ai-gateway-basic-azure-deepseek-${FOUNDRY_DEEPSEEK_ROUTE}
+  type: AzureAPIKey
+  azureAPIKey:
+    secretRef:
+      name: envoy-ai-gateway-basic-azure-deepseek-${FOUNDRY_DEEPSEEK_ROUTE}-apikey
+      namespace: default
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: envoy-ai-gateway-basic-azure-deepseek-${FOUNDRY_DEEPSEEK_ROUTE}
+  namespace: default
+spec:
+  endpoints:
+    - fqdn:
+        hostname: ${FOUNDRY_DEEPSEEK_ENDPOINT_HOST}
+        port: 443
+---
+apiVersion: gateway.networking.k8s.io/v1alpha3
+kind: BackendTLSPolicy
+metadata:
+  name: envoy-ai-gateway-basic-azure-deepseek-${FOUNDRY_DEEPSEEK_ROUTE}-tls
+  namespace: default
+spec:
+  targetRefs:
+    - group: "gateway.envoyproxy.io"
+      kind: Backend
+      name: envoy-ai-gateway-basic-azure-deepseek-${FOUNDRY_DEEPSEEK_ROUTE}
+  validation:
+    wellKnownCACertificates: "System"
+    hostname: ${FOUNDRY_DEEPSEEK_ENDPOINT_HOST}

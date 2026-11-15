@@ -97,7 +97,10 @@ cp .env.example .env   # edit with the keys
 ./scripts/apply-gemini-route.sh
 ./scripts/apply-deepseek-route.sh
 ./scripts/apply-azure-route.sh
+./scripts/apply-azure-deepseek-route.sh
 ```
+
+`apply-azure-deepseek-route.sh` needs `FOUNDRY_DEEPSEEK_MODEL` (the Foundry deployment name, for example `DeepSeek-V4-Flash`). The endpoint host and the key default to `AZURE_ENDPOINT_HOST` and `AZURE_OPENAI_API_KEY`. The gateway matches the `x-ai-eg-model` header exactly and case-sensitively, so `DeepSeek-V4-Flash` (Foundry) and `deepseek-v4-flash` (direct DeepSeek API) are different routes.
 
 ### Route Testing
 
@@ -132,6 +135,12 @@ curl -i -H "Content-Type: application/json" \
 curl -i -H "Content-Type: application/json" \
 -H "x-ai-eg-model: gpt-5-mini" \
 -d '{ "model": "gpt-5-mini", "messages": [{"role": "user", "content": "Do you have reasoning enabled?"}] }' \
+$GATEWAY_URL/v1/chat/completions
+
+# DeepSeek provided by Microsoft Foundry: the model is the deployment name (FOUNDRY_DEEPSEEK_MODEL)
+curl -i -H "Content-Type: application/json" \
+-H "x-ai-eg-model: DeepSeek-V4-Flash" \
+-d '{ "model": "DeepSeek-V4-Flash", "messages": [{"role": "user", "content": "Do you have reasoning enabled?"}] }' \
 $GATEWAY_URL/v1/chat/completions
 ```
 
