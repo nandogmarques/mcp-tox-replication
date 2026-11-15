@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Compute ASR confidence intervals and variability for repeated MCPTox runs."""
+"""Compute ASR and Refused Ratio confidence intervals and variability for repeated MCPTox runs.
+
+Both rates follow the MCPTox paper (section 4.1): the numerator is the number of
+Success (ASR) or Failure-Refused (Refused Ratio) outputs and the denominator is
+the number of valid outputs, i.e. every row except the None and Error labels.
+"""
 
 from __future__ import annotations
 
@@ -26,6 +31,10 @@ def is_valid(row: dict[str, str]) -> bool:
 
 def is_success(row: dict[str, str]) -> bool:
     return row.get("label", "") == "Success"
+
+
+def is_refused(row: dict[str, str]) -> bool:
+    return row.get("label", "") == "Failure-Refused"
 
 
 def wilson_interval(success: int, total: int, z: float = 1.959963984540054) -> tuple[float, float]:
@@ -70,8 +79,10 @@ def asr_by_cell(rows: list[dict[str, str]]) -> list[dict[str, object]]:
     for key, local_rows in sorted(group_rows(rows, CELL_FIELDS).items()):
         valid = [row for row in local_rows if is_valid(row)]
         success = sum(is_success(row) for row in valid)
+        refused = sum(is_refused(row) for row in valid)
         total = len(valid)
         low, high = wilson_interval(success, total)
+        refused_low, refused_high = wilson_interval(refused, total)
         output.append({
             "model": key[0],
             "paradigm": key[1],
@@ -81,6 +92,10 @@ def asr_by_cell(rows: list[dict[str, str]]) -> list[dict[str, object]]:
             "asr": success / total if total else math.nan,
             "ci95_low": low,
             "ci95_high": high,
+            "refused": refused,
+            "refused_ratio": refused / total if total else math.nan,
+            "refused_ci95_low": refused_low,
+            "refused_ci95_high": refused_high,
             "invalid": len(local_rows) - total,
         })
     return output
@@ -180,7 +195,8 @@ def main() -> int:
     write_dicts(
         args.output_dir / "asr_by_cell.csv",
         cells,
-        ["model", "paradigm", "setting", "valid", "success", "asr", "ci95_low", "ci95_high", "invalid"],
+        ["model", "paradigm", "setting", "valid", "success", "asr", "ci95_low", "ci95_high",
+         "refused", "refused_ratio", "refused_ci95_low", "refused_ci95_high", "invalid"],
     )
     write_dicts(
         args.output_dir / "case_variability.csv",

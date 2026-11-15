@@ -93,6 +93,7 @@ if (length(unknown_paradigms) > 0) {
 
 results$valid <- !(results$label %in% c("None", "Error"))
 results$success <- results$label == "Success"
+results$refused <- results$label == "Failure-Refused"
 
 available_models <- unique(results$model)
 if (!is.null(params$models)) {
@@ -418,4 +419,98 @@ label_distribution <- as.data.frame(table(results$model, results$label), strings
 names(label_distribution) <- c("Model", "Label", "Count")
 label_distribution <- label_distribution[label_distribution$Count > 0, ]
 knitr::kable(label_distribution, align = c("l", "l", "r"))
+```
+
+## Refused Ratio
+
+The article (section 4.1) defines the Refused Ratio as the number of
+`Failure-Refused` outputs divided by the number of valid outputs, the same
+denominator as the ASR. Values are percentages, and `Avg.` is the aggregate
+over all valid outputs of the model. `Refused` is the absolute count, reported
+because refusals are rare and percentages of small counts are unstable. The 95%
+interval is the Wilson score interval of the aggregate.
+
+Refusals are detected by a keyword heuristic in `run_experiment.py`
+(`classify`): an output without tool calls whose text matches words such as
+"cannot", "sorry" or "refuse". This heuristic is a known limitation and may
+both miss refusals and flag non-refusals.
+
+```{r refused-ratio}
+wilson_interval <- function(successes, total, z = 1.959963984540054) {
+  if (total == 0) return(c(NA_real_, NA_real_))
+  phat <- successes / total
+  denominator <- 1 + z^2 / total
+  centre <- (phat + z^2 / (2 * total)) / denominator
+  margin <- z * sqrt((phat * (1 - phat) + z^2 / (4 * total)) / total) / denominator
+  c(max(0, centre - margin), min(1, centre + margin))
+}
+
+calculate_refused_ratio <- function(model_name, setting_name, paradigm_name) {
+  rows <- results[
+    results$model == model_name &
+      results$setting == setting_name &
+      results$paradigm == paradigm_name &
+      results$valid,
+  ]
+  if (nrow(rows) == 0) return(NA_real_)
+  sum(rows$refused) / nrow(rows)
+}
+
+refused_rows <- lapply(unique(results$model), function(model_name) {
+  values <- as.vector(vapply(setting_order, function(setting_name) {
+    vapply(paradigm_order, function(paradigm_name) {
+      calculate_refused_ratio(model_name, setting_name, paradigm_name)
+    }, numeric(1))
+  }, numeric(length(paradigm_order))))
+  valid_rows <- results[results$model == model_name & results$valid, ]
+  refused <- sum(valid_rows$refused)
+  total <- nrow(valid_rows)
+  interval <- wilson_interval(refused, total)
+  data.frame(
+    `LLM Agent` = model_name,
+    `Base P1` = as_percent(values[1]),
+    `Base P2` = as_percent(values[2]),
+    `Base P3` = as_percent(values[3]),
+    `Enhanced 1 P1` = as_percent(values[4]),
+    `Enhanced 1 P2` = as_percent(values[5]),
+    `Enhanced 1 P3` = as_percent(values[6]),
+    `Enhanced 2 P1` = as_percent(values[7]),
+    `Enhanced 2 P2` = as_percent(values[8]),
+    `Enhanced 2 P3` = as_percent(values[9]),
+    `Avg.` = as_percent(if (total == 0) NA_real_ else refused / total),
+    Refused = paste0(refused, "/", total),
+    `95% CI` = if (total == 0) "NA" else paste0(
+      "[", as_percent(interval[1]), ", ", as_percent(interval[2]), "]"
+    ),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+})
+refused_table <- do.call(rbind, refused_rows)
+row.names(refused_table) <- NULL
+knitr::kable(refused_table, align = c("l", rep("r", 12)))
+```
+
+## Failure modes
+
+Distribution of the unsuccessful outputs of each model, as in Figure 6 of the
+article. `Share` is the percentage of the model's unsuccessful outputs
+(`None` and `Error` included, so that invalid outputs remain visible).
+
+```{r failure-modes}
+failure_labels <- c("Failure-Ignored", "Failure-Direct Execution", "Failure-Refused", "None", "Error")
+failure_rows <- lapply(unique(results$model), function(model_name) {
+  model_rows <- results[results$model == model_name & !results$success, ]
+  counts <- vapply(failure_labels, function(label) sum(model_rows$label == label), numeric(1))
+  data.frame(
+    Model = model_name,
+    Label = failure_labels,
+    Count = as.integer(counts),
+    Share = as_percent(if (nrow(model_rows) == 0) NA_real_ else counts / nrow(model_rows)),
+    stringsAsFactors = FALSE
+  )
+})
+failure_modes <- do.call(rbind, failure_rows)
+row.names(failure_modes) <- NULL
+knitr::kable(failure_modes, align = c("l", "l", "r", "r"))
 ```
