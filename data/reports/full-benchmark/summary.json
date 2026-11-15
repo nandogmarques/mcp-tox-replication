@@ -5,31 +5,42 @@
     "Failure-Ignored": 468,
     "total": 1455,
     "evaluated": 1455,
+    "success": 517,
     "asr": 0.35532646048109967,
+    "refused": 0,
+    "refused_ratio": 0.0,
     "by_setting": {
       "base": {
         "total": 485,
         "evaluated": 485,
         "success": 167,
         "asr": 0.3443298969072165,
+        "refused": 0,
+        "refused_ratio": 0.0,
         "by_paradigm": {
           "Template-1": {
             "total": 77,
             "evaluated": 77,
             "success": 25,
-            "asr": 0.3246753246753247
+            "asr": 0.3246753246753247,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-2": {
             "total": 183,
             "evaluated": 183,
             "success": 57,
-            "asr": 0.3114754098360656
+            "asr": 0.3114754098360656,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-3": {
             "total": 225,
             "evaluated": 225,
             "success": 85,
-            "asr": 0.37777777777777777
+            "asr": 0.37777777777777777,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       },
@@ -38,24 +49,32 @@
         "evaluated": 485,
         "success": 179,
         "asr": 0.36907216494845363,
+        "refused": 0,
+        "refused_ratio": 0.0,
         "by_paradigm": {
           "Template-1": {
             "total": 77,
             "evaluated": 77,
             "success": 26,
-            "asr": 0.33766233766233766
+            "asr": 0.33766233766233766,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-2": {
             "total": 183,
             "evaluated": 183,
             "success": 57,
-            "asr": 0.3114754098360656
+            "asr": 0.3114754098360656,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-3": {
             "total": 225,
             "evaluated": 225,
             "success": 96,
-            "asr": 0.4266666666666667
+            "asr": 0.4266666666666667,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       },
@@ -64,24 +83,32 @@
         "evaluated": 485,
         "success": 171,
         "asr": 0.3525773195876289,
+        "refused": 0,
+        "refused_ratio": 0.0,
         "by_paradigm": {
           "Template-1": {
             "total": 77,
             "evaluated": 77,
             "success": 21,
-            "asr": 0.2727272727272727
+            "asr": 0.2727272727272727,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-2": {
             "total": 183,
             "evaluated": 183,
             "success": 53,
-            "asr": 0.2896174863387978
+            "asr": 0.2896174863387978,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-3": {
             "total": 225,
             "evaluated": 225,
             "success": 97,
-            "asr": 0.4311111111111111
+            "asr": 0.4311111111111111,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       }
@@ -95,31 +122,42 @@
     "None": 4,
     "total": 1455,
     "evaluated": 1451,
+    "success": 846,
     "asr": 0.5830461750516885,
+    "refused": 13,
+    "refused_ratio": 0.00895933838731909,
     "by_setting": {
       "base": {
         "total": 485,
         "evaluated": 484,
         "success": 276,
         "asr": 0.5702479338842975,
+        "refused": 3,
+        "refused_ratio": 0.006198347107438017,
         "by_paradigm": {
           "Template-1": {
             "total": 77,
             "evaluated": 77,
             "success": 44,
-            "asr": 0.5714285714285714
+            "asr": 0.5714285714285714,
+            "refused": 2,
+            "refused_ratio": 0.025974025974025976
           },
           "Template-2": {
             "total": 183,
             "evaluated": 182,
             "success": 94,
-            "asr": 0.5164835164835165
+            "asr": 0.5164835164835165,
+            "refused": 1,
+            "refused_ratio": 0.005494505494505495
           },
           "Template-3": {
             "total": 225,
             "evaluated": 225,
             "success": 138,
-            "asr": 0.6133333333333333
+            "asr": 0.6133333333333333,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       },
@@ -128,24 +166,32 @@
         "evaluated": 483,
         "success": 303,
         "asr": 0.6273291925465838,
+        "refused": 7,
+        "refused_ratio": 0.014492753623188406,
         "by_paradigm": {
           "Template-1": {
             "total": 77,
             "evaluated": 77,
             "success": 46,
-            "asr": 0.5974025974025974
+            "asr": 0.5974025974025974,
+            "refused": 2,
+            "refused_ratio": 0.025974025974025976
           },
           "Template-2": {
             "total": 183,
             "evaluated": 182,
             "success": 106,
-            "asr": 0.5824175824175825
+            "asr": 0.5824175824175825,
+            "refused": 4,
+            "refused_ratio": 0.02197802197802198
           },
           "Template-3": {
             "total": 225,
             "evaluated": 224,
             "success": 151,
-            "asr": 0.6741071428571429
+            "asr": 0.6741071428571429,
+            "refused": 1,
+            "refused_ratio": 0.004464285714285714
           }
         }
       },
@@ -154,24 +200,32 @@
         "evaluated": 484,
         "success": 267,
         "asr": 0.5516528925619835,
+        "refused": 3,
+        "refused_ratio": 0.006198347107438017,
         "by_paradigm": {
           "Template-1": {
             "total": 77,
             "evaluated": 77,
             "success": 40,
-            "asr": 0.5194805194805194
+            "asr": 0.5194805194805194,
+            "refused": 2,
+            "refused_ratio": 0.025974025974025976
           },
           "Template-2": {
             "total": 183,
             "evaluated": 182,
             "success": 106,
-            "asr": 0.5824175824175825
+            "asr": 0.5824175824175825,
+            "refused": 1,
+            "refused_ratio": 0.005494505494505495
           },
           "Template-3": {
             "total": 225,
             "evaluated": 225,
             "success": 121,
-            "asr": 0.5377777777777778
+            "asr": 0.5377777777777778,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       }
@@ -185,31 +239,42 @@
     "None": 1,
     "total": 1455,
     "evaluated": 1454,
+    "success": 747,
     "asr": 0.5137551581843192,
+    "refused": 4,
+    "refused_ratio": 0.002751031636863824,
     "by_setting": {
       "base": {
         "total": 485,
         "evaluated": 485,
         "success": 254,
         "asr": 0.5237113402061856,
+        "refused": 0,
+        "refused_ratio": 0.0,
         "by_paradigm": {
           "Template-1": {
             "total": 77,
             "evaluated": 77,
             "success": 37,
-            "asr": 0.4805194805194805
+            "asr": 0.4805194805194805,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-2": {
             "total": 183,
             "evaluated": 183,
             "success": 90,
-            "asr": 0.4918032786885246
+            "asr": 0.4918032786885246,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-3": {
             "total": 225,
             "evaluated": 225,
             "success": 127,
-            "asr": 0.5644444444444444
+            "asr": 0.5644444444444444,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       },
@@ -218,24 +283,32 @@
         "evaluated": 484,
         "success": 261,
         "asr": 0.5392561983471075,
+        "refused": 1,
+        "refused_ratio": 0.002066115702479339,
         "by_paradigm": {
           "Template-1": {
             "total": 77,
             "evaluated": 77,
             "success": 37,
-            "asr": 0.4805194805194805
+            "asr": 0.4805194805194805,
+            "refused": 1,
+            "refused_ratio": 0.012987012987012988
           },
           "Template-2": {
             "total": 183,
             "evaluated": 183,
             "success": 98,
-            "asr": 0.5355191256830601
+            "asr": 0.5355191256830601,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-3": {
             "total": 225,
             "evaluated": 224,
             "success": 126,
-            "asr": 0.5625
+            "asr": 0.5625,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       },
@@ -244,24 +317,32 @@
         "evaluated": 485,
         "success": 232,
         "asr": 0.47835051546391755,
+        "refused": 3,
+        "refused_ratio": 0.006185567010309278,
         "by_paradigm": {
           "Template-1": {
             "total": 77,
             "evaluated": 77,
             "success": 31,
-            "asr": 0.4025974025974026
+            "asr": 0.4025974025974026,
+            "refused": 1,
+            "refused_ratio": 0.012987012987012988
           },
           "Template-2": {
             "total": 183,
             "evaluated": 183,
             "success": 97,
-            "asr": 0.5300546448087432
+            "asr": 0.5300546448087432,
+            "refused": 1,
+            "refused_ratio": 0.00546448087431694
           },
           "Template-3": {
             "total": 225,
             "evaluated": 225,
             "success": 104,
-            "asr": 0.4622222222222222
+            "asr": 0.4622222222222222,
+            "refused": 1,
+            "refused_ratio": 0.0044444444444444444
           }
         }
       }

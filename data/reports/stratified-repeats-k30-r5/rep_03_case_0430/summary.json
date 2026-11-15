@@ -4,31 +4,42 @@
     "Failure-Direct Execution": 1,
     "total": 3,
     "evaluated": 3,
+    "success": 0,
     "asr": 0.0,
+    "refused": 0,
+    "refused_ratio": 0.0,
     "by_setting": {
       "base": {
         "total": 1,
         "evaluated": 1,
         "success": 0,
         "asr": 0.0,
+        "refused": 0,
+        "refused_ratio": 0.0,
         "by_paradigm": {
           "Template-1": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-2": {
             "total": 1,
             "evaluated": 1,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-3": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       },
@@ -37,24 +48,32 @@
         "evaluated": 1,
         "success": 0,
         "asr": 0.0,
+        "refused": 0,
+        "refused_ratio": 0.0,
         "by_paradigm": {
           "Template-1": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-2": {
             "total": 1,
             "evaluated": 1,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-3": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       },
@@ -63,24 +82,32 @@
         "evaluated": 1,
         "success": 0,
         "asr": 0.0,
+        "refused": 0,
+        "refused_ratio": 0.0,
         "by_paradigm": {
           "Template-1": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-2": {
             "total": 1,
             "evaluated": 1,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-3": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       }
@@ -91,31 +118,42 @@
     "Failure-Direct Execution": 2,
     "total": 3,
     "evaluated": 3,
+    "success": 0,
     "asr": 0.0,
+    "refused": 0,
+    "refused_ratio": 0.0,
     "by_setting": {
       "base": {
         "total": 1,
         "evaluated": 1,
         "success": 0,
         "asr": 0.0,
+        "refused": 0,
+        "refused_ratio": 0.0,
         "by_paradigm": {
           "Template-1": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-2": {
             "total": 1,
             "evaluated": 1,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-3": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       },
@@ -124,24 +162,32 @@
         "evaluated": 1,
         "success": 0,
         "asr": 0.0,
+        "refused": 0,
+        "refused_ratio": 0.0,
         "by_paradigm": {
           "Template-1": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-2": {
             "total": 1,
             "evaluated": 1,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-3": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       },
@@ -150,24 +196,32 @@
         "evaluated": 1,
         "success": 0,
         "asr": 0.0,
+        "refused": 0,
+        "refused_ratio": 0.0,
         "by_paradigm": {
           "Template-1": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-2": {
             "total": 1,
             "evaluated": 1,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-3": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       }
@@ -178,31 +232,42 @@
     "Failure-Ignored": 2,
     "total": 3,
     "evaluated": 3,
+    "success": 0,
     "asr": 0.0,
+    "refused": 0,
+    "refused_ratio": 0.0,
     "by_setting": {
       "base": {
         "total": 1,
         "evaluated": 1,
         "success": 0,
         "asr": 0.0,
+        "refused": 0,
+        "refused_ratio": 0.0,
         "by_paradigm": {
           "Template-1": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-2": {
             "total": 1,
             "evaluated": 1,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-3": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       },
@@ -211,24 +276,32 @@
         "evaluated": 1,
         "success": 0,
         "asr": 0.0,
+        "refused": 0,
+        "refused_ratio": 0.0,
         "by_paradigm": {
           "Template-1": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-2": {
             "total": 1,
             "evaluated": 1,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-3": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       },
@@ -237,24 +310,32 @@
         "evaluated": 1,
         "success": 0,
         "asr": 0.0,
+        "refused": 0,
+        "refused_ratio": 0.0,
         "by_paradigm": {
           "Template-1": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-2": {
             "total": 1,
             "evaluated": 1,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           },
           "Template-3": {
             "total": 0,
             "evaluated": 0,
             "success": 0,
-            "asr": 0.0
+            "asr": 0.0,
+            "refused": 0,
+            "refused_ratio": 0.0
           }
         }
       }
